@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 聚光灯基础容器 */
+.js-spotlightBin {
+  position: relative;
+}
+
+/* 带有聚光灯效果的组件 */
+.spotlight {
+  position: relative;
+  overflow: hidden;
+}
+
+/* 聚光灯高光层 */
+.spotlight::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  /* 使用 CSS 变量接收 React 传来的实时坐标 */
+  background: radial-gradient(
+    600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(255, 255, 255, 0.12),
+    transparent 40%
+  );
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 亮色模式下加强高光对比度 */
+html:not(.dark) .spotlight::before {
+  background: radial-gradient(
+    600px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(255, 255, 255, 0.8),
+    transparent 40%
+  );
+}
+
+/* 鼠标悬浮父容器时激活所有聚光灯 */
+.js-spotlightBin:hover .spotlight::before {
+  opacity: 1;
+}
+
+/* Add these rules to src/index.css (or import this file from the app's global stylesheet).
+   These rules affect the outer React/Vite page, unlike notes.src/styles.css which only
+   styles the document inside the iframe. */
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}

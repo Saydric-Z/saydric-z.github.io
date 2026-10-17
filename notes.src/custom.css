@@ -1,0 +1,28 @@
+/* 1. 解决页面贴死容器边框的问题，提供宽屏学术留白 */
+body {
+  padding: 3rem 4rem !important;
+  max-width: 1400px !important;
+  margin: 0 auto !important;
+  font-family: "Latin Modern Roman", "Computer Modern Serif", "Times New Roman", serif !important;
+  line-height: 1.75 !important;
+  color: #171717;
+  background-color: #ffffff;
+}
+
+/* 2. 彻底禁用点击公式时出现的紫色/黑色焦点框与高亮背景 */
+mjx-container,
+mjx-container:focus,
+mjx-container:active,
+.MathJax,
+.MathJax:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+  background-color: transparent !important;
+  user-select: text !important;
+}
+
+/* 3. 解决 \begin{proof} 渲染后出现两个 "Proof. Proof." 的问题 */
+.proof > p:first-child > strong:first-child {
+  display: none !important;
+}

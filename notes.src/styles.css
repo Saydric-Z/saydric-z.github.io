@@ -1,0 +1,51 @@
+/* notes.src/styles.css */
+
+/* Remove the Quarto title, author, and date block duplicated by React. */
+#title-block-header {
+  display: none !important;
+}
+
+/* Remove leftover top spacing after hiding the title block. */
+#quarto-content {
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+}
+
+main.content {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* Keep Quarto's content inside the iframe viewport. */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+#quarto-content,
+main.content,
+.page-columns {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Prevent code blocks and media from forcing horizontal page overflow. */
+pre,
+table {
+  max-width: 100%;
+}
+
+pre {
+  overflow-x: auto;
+}
+
+img,
+svg,
+video {
+  max-width: 100%;
+}
+
+#title-block-header {
+  display: none !important;
+}

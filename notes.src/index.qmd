@@ -1,0 +1,7 @@
+---
+title: "Scholarly Notes Archive"
+---
+
+欢迎查阅学术笔记库。本模块采用 Quarto 预编译引擎，支持完备的 LaTeX 定理、证明与公式推导。
+
+- [Probability and Statistics](probability.qmd)

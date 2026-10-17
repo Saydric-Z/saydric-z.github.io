@@ -1,0 +1,54 @@
+project:
+  type: default
+  output-dir: ../public/notes
+
+format:
+  html:
+    theme: none
+    css: styles.css
+    toc: false
+    html-math-method:
+      method: mathjax
+      url: https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+    include-in-header:
+      text: |
+        <script>
+        window.MathJax = {
+          tex: {
+            inlineMath: [['$', '$'], ['\\(', '\\)']],
+            displayMath: [['$$', '$$'], ['\\[', '\\]']],
+            processEscapes: true,
+            processEnvironments: true,
+            macros: {
+              R: "\\mathbb{R}",
+              N: "\\mathbb{N}",
+              E: "\\mathbb{E}",
+              P: "\\mathbb{P}",
+              Var: "\\mathrm{Var}",
+              Cov: "\\mathrm{Cov}",
+              SD: "\\mathrm{SD}",
+              // Makes \L render as a calligraphic likelihood symbol.
+              L: "\\mathcal{L}",
+              abs: ["\\left|#1\\right|", 1],
+              mgf: ["M_{#1}(#2)", 2],
+              sig: ["\\sigma_{#1}^{#2}", 2],
+              sqr: ["{#1}^{2}", 1],
+              pow: ["{#1}^{#2}", 2],
+              nder: ["\\frac{\\mathrm{d}^{#1} #2}{\\mathrm{d} #3^{#1}}", 3],
+              npder: ["\\frac{\\partial^{#1} #2}{\\partial #3^{#1}}", 3],
+              uint: ["\\int_{#1}^{#2} #3\\,\\mathrm{d}#4", 4],
+              dd: "\\,\\mathrm{d}",
+              evalat: ["\\left.#1\\right|_{#2}", 2],
+              eval: ["\\left.#1\\right|_{#2}^{#3}", 3],
+              // Spacing macro only: \indentfor is a different, undefined command.
+              // In math source, prefer \quad \text{for } instead of \indentfor.
+              indent: "\\quad ",
+              noindent: ""
+            }
+          },
+          options: {
+            enableMenu: false,
+            skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+          }
+        };
+        </script>
