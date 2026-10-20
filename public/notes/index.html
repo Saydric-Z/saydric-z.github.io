@@ -28,6 +28,19 @@ ul.task-list li input[type="checkbox"] {
 }
 </style>
 
+<script>
+  // 从查询参数中恢复单页路由真实路径
+  (function(l) {
+    if (l.search[1] === '/' ) {
+      var decoded = l.search.slice(1).split('&').map(function(s) { 
+        return s.replace(/~and~/g, '&')
+      }).join('?');
+      window.history.replaceState(null, null,
+          l.pathname.slice(0, -1) + decoded + l.hash
+      );
+    }
+  }(window.location))
+</script>
 
 <script src="index_files/libs/clipboard/clipboard.min.js"></script>
 <script src="index_files/libs/quarto-html/tabby.min.js"></script>
@@ -66,7 +79,7 @@ window.MathJax = {
       evalat: ["\\left.#1\\right|_{#2}", 2],
       eval: ["\\left.#1\\right|_{#2}^{#3}", 3],
       indent: "\\quad",
-      intertext: ["\\text{#1}", 1]
+      intertext: ["\\text{#1}", 1],
       noindent: ""
     }
   },

@@ -22,9 +22,7 @@ export default function AboutPage({ onNavigate }) {
 
   const profile = SITE_DATA?.profile;
 
-  const researchAreas = Array.isArray(
-    profile?.researchAreas
-  )
+  const researchAreas = Array.isArray(profile?.researchAreas)
     ? profile.researchAreas
     : [];
 
@@ -36,13 +34,10 @@ export default function AboutPage({ onNavigate }) {
     ? profile.bio
     : [];
 
+  // 互换顺序：Computer Science 放在 Statistics 前面
   const domain =
     profile?.domain ??
-    'PROBABILITY & MATHEMATICAL STATISTICS';
-
-  const tagline =
-    profile?.tagline ??
-    'A growing collection of academic notes in mathematics, probability, statistics, and computation.';
+    'COMPUTER SCIENCE & STATISTICS';
 
   const edition = profile?.edition ?? '2026';
 
@@ -100,13 +95,11 @@ export default function AboutPage({ onNavigate }) {
 
         <section className="w-full">
           {/* Academic field / domain */}
-
           <p className="mb-5 font-mono text-xs uppercase tracking-widest text-neutral-400">
             {domain}
           </p>
 
           {/* Main heading */}
-
           <h1
             className="
               mb-7
@@ -127,30 +120,11 @@ export default function AboutPage({ onNavigate }) {
             </span>
           </h1>
 
-          {/* Tagline */}
-
-          <p
-            className="
-              mb-7
-              max-w-3xl
-              font-serif
-              text-lg
-              italic
-              leading-relaxed
-              text-neutral-700
-              sm:text-xl
-              dark:text-neutral-300
-            "
-          >
-            {tagline}
-          </p>
-
           {/* Biography */}
-
           {bio.length > 0 && (
             <div
               className="
-                max-w-3xl
+                w-full
                 space-y-4
                 text-base
                 leading-relaxed
@@ -171,7 +145,6 @@ export default function AboutPage({ onNavigate }) {
           )}
 
           {/* Edition and navigation */}
-
           <div
             className="
               mt-10
@@ -304,7 +277,6 @@ export default function AboutPage({ onNavigate }) {
                   `}
                 >
                   {/* Left: index and research title */}
-
                   <div
                     className="
                       grid
@@ -348,7 +320,6 @@ export default function AboutPage({ onNavigate }) {
                   </div>
 
                   {/* Right: description */}
-
                   <p
                     className="
                       min-w-0
@@ -363,7 +334,6 @@ export default function AboutPage({ onNavigate }) {
                   </p>
 
                   {/* Arrow */}
-
                   <div
                     className="
                       hidden
@@ -457,7 +427,6 @@ export default function AboutPage({ onNavigate }) {
                     `}
                   >
                     {/* Contact label */}
-
                     <div className="flex min-w-0 items-center gap-3">
                       <Icon
                         className="h-4 w-4 shrink-0 text-neutral-400"
@@ -478,7 +447,6 @@ export default function AboutPage({ onNavigate }) {
                     </div>
 
                     {/* Contact value */}
-
                     <span
                       className="
                         min-w-0
@@ -494,7 +462,6 @@ export default function AboutPage({ onNavigate }) {
                     </span>
 
                     {/* Copy status */}
-
                     <span
                       className="
                         inline-flex
