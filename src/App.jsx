@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import Header from './components/Header';
+import Footer from './components/Footer';
 import SearchModal from './components/SearchModal';
 
 import AboutPage from './pages/AboutPage';
+import ProjectsPage from './pages/ProjectsPage';
 import ArchivePage from './pages/ArchivePage';
 import NoteDetailPage from './pages/NoteDetailPage';
 
@@ -17,6 +19,7 @@ import { SITE_DATA } from './data/siteData';
 
 const VIEW_PATHS = {
   about: '/about',
+  projects: '/projects',
   notes: '/notes',
   blogs: '/blogs',
 };
@@ -43,6 +46,7 @@ function decodePathSegment(segment) {
  * Supported routes:
  *   /             -> About
  *   /about        -> About
+ *   /projects     -> Projects
  *   /notes        -> Notes archive
  *   /blogs        -> Blogs
  *   /notes/:id    -> Note detail
@@ -57,6 +61,14 @@ function resolveRoute(pathname) {
       view: 'about',
       publication: null,
       canonicalPath: path,
+    };
+  }
+
+  if (path === '/projects') {
+    return {
+      view: 'projects',
+      publication: null,
+      canonicalPath: '/projects',
     };
   }
 
@@ -81,9 +93,7 @@ function resolveRoute(pathname) {
   if (detailMatch) {
     const noteId = decodePathSegment(detailMatch[1]);
 
-    const publications = Array.isArray(
-      SITE_DATA?.publications,
-    )
+    const publications = Array.isArray(SITE_DATA?.publications)
       ? SITE_DATA.publications
       : [];
 
@@ -95,9 +105,7 @@ function resolveRoute(pathname) {
       return {
         view: 'detail',
         publication,
-        canonicalPath: `/notes/${encodeURIComponent(
-          publication.id,
-        )}`,
+        canonicalPath: `/notes/${encodeURIComponent(publication.id)}`,
       };
     }
   }
@@ -114,15 +122,10 @@ function resolveRoute(pathname) {
 // ============================================================
 
 export default function App() {
-  // ----------------------------------------------------------
-  // Initialize application state from the current URL
-  // ----------------------------------------------------------
-
+  // Initialize application state from the current URL.
   const [routeState, setRouteState] = useState(() => {
     const pathname =
-      typeof window !== 'undefined'
-        ? window.location.pathname
-        : '/';
+      typeof window !== 'undefined' ? window.location.pathname : '/';
 
     return resolveRoute(pathname);
   });
@@ -130,10 +133,10 @@ export default function App() {
   const currentView = routeState.view;
   const selectedNote = routeState.publication;
 
-  // Global search modal
+  // Global search modal.
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Dark mode preference
+  // Dark mode preference.
   const [isDarkMode, setIsDarkMode] = useState(() => {
     try {
       const savedTheme = window.localStorage.getItem('theme');
@@ -150,36 +153,20 @@ export default function App() {
     );
   });
 
-  // ----------------------------------------------------------
-  // Keep noncanonical paths consistent with the resolved route
-  // ----------------------------------------------------------
-
+  // Keep noncanonical paths consistent with the resolved route.
   useEffect(() => {
-    if (
-      window.location.pathname !== routeState.canonicalPath
-    ) {
-      window.history.replaceState(
-        null,
-        '',
-        routeState.canonicalPath,
-      );
+    if (window.location.pathname !== routeState.canonicalPath) {
+      window.history.replaceState(null, '', routeState.canonicalPath);
     }
   }, [routeState.canonicalPath]);
 
-  // ----------------------------------------------------------
-  // Theme management
-  // ----------------------------------------------------------
-
+  // Theme management.
   useEffect(() => {
     const root = document.documentElement;
-
     root.classList.toggle('dark', isDarkMode);
 
     try {
-      window.localStorage.setItem(
-        'theme',
-        isDarkMode ? 'dark' : 'light',
-      );
+      window.localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
     } catch {
       // Theme switching still works if storage is unavailable.
     }
@@ -193,59 +180,35 @@ export default function App() {
   // Native browser history
   // ----------------------------------------------------------
 
-  /**
-   * Push a new history entry only when the pathname changes.
-   * replaceState is reserved for normalizing an invalid/noncanonical URL.
-   */
   const pushUrl = useCallback((path) => {
     if (window.location.pathname !== path) {
       window.history.pushState(null, '', path);
     }
   }, []);
 
-  /**
-   * Support the browser Back and Forward buttons.
-   *
-   * popstate changes application state without pushing another
-   * history entry, preventing navigation loops.
-   */
+  // Support browser Back and Forward buttons without creating new entries.
   useEffect(() => {
     const handlePopState = () => {
-      const nextRoute = resolveRoute(
-        window.location.pathname,
-      );
+      const nextRoute = resolveRoute(window.location.pathname);
 
-      if (
-        window.location.pathname !== nextRoute.canonicalPath
-      ) {
-        window.history.replaceState(
-          null,
-          '',
-          nextRoute.canonicalPath,
-        );
+      if (window.location.pathname !== nextRoute.canonicalPath) {
+        window.history.replaceState(null, '', nextRoute.canonicalPath);
       }
 
       setRouteState(nextRoute);
       setIsSearchOpen(false);
-
-      window.scrollTo({
-        top: 0,
-        behavior: 'auto',
-      });
+      window.scrollTo({ top: 0, behavior: 'auto' });
     };
 
     window.addEventListener('popstate', handlePopState);
 
     return () => {
-      window.removeEventListener(
-        'popstate',
-        handlePopState,
-      );
+      window.removeEventListener('popstate', handlePopState);
     };
   }, []);
 
   // ----------------------------------------------------------
-  // Search modal and global keyboard shortcuts
+  // Search modal
   // ----------------------------------------------------------
 
   const openSearch = useCallback(() => {
@@ -256,29 +219,18 @@ export default function App() {
     setIsSearchOpen(false);
   }, []);
 
+  // Header owns the Cmd/Ctrl+K shortcut. This app-level listener only
+  // provides a global Escape fallback, avoiding duplicate shortcut handlers
+  // that could open and immediately close the search modal.
   useEffect(() => {
-    const handleKeyDown = (event) => {
-      const isSearchShortcut =
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === 'k';
-
-      if (isSearchShortcut) {
-        event.preventDefault();
-
-        setIsSearchOpen((previous) => !previous);
-        return;
-      }
-
+    const handleEscape = (event) => {
       if (event.key === 'Escape') {
         setIsSearchOpen(false);
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
   // ----------------------------------------------------------
@@ -288,6 +240,7 @@ export default function App() {
   /**
    * Supports:
    *   handleNavigate('about')
+   *   handleNavigate('projects')
    *   handleNavigate('notes')
    *   handleNavigate('blogs')
    *   handleNavigate('detail', 'st1')
@@ -299,30 +252,20 @@ export default function App() {
       let nextPath;
 
       if (view === 'detail') {
-        const publications = Array.isArray(
-          SITE_DATA?.publications,
-        )
+        const publications = Array.isArray(SITE_DATA?.publications)
           ? SITE_DATA.publications
           : [];
 
         const publication =
-          noteIdOrObject &&
-          typeof noteIdOrObject === 'object'
+          noteIdOrObject && typeof noteIdOrObject === 'object'
             ? noteIdOrObject
             : publications.find(
-                (item) =>
-                  String(item?.id) ===
-                  String(noteIdOrObject),
+                (item) => String(item?.id) === String(noteIdOrObject),
               );
 
-        if (!publication?.id) {
-          return;
-        }
+        if (!publication?.id) return;
 
-        nextPath = `/notes/${encodeURIComponent(
-          publication.id,
-        )}`;
-
+        nextPath = `/notes/${encodeURIComponent(publication.id)}`;
         nextRoute = {
           view: 'detail',
           publication,
@@ -330,10 +273,7 @@ export default function App() {
         };
       } else {
         nextPath = VIEW_PATHS[view];
-
-        if (!nextPath) {
-          return;
-        }
+        if (!nextPath) return;
 
         nextRoute = {
           view,
@@ -342,47 +282,34 @@ export default function App() {
         };
       }
 
-      // Update the address bar and React state together.
+      // Update address bar and React state together.
       pushUrl(nextPath);
       setRouteState(nextRoute);
-
-      // A navigation action always closes the search modal.
       setIsSearchOpen(false);
-
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth',
-      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     [pushUrl],
   );
 
-  // ----------------------------------------------------------
-  // Select a publication
-  // ----------------------------------------------------------
-
-  // Shared by ArchivePage and SearchModal.
+  // Shared by the Notes archive and SearchModal.
   const handleSelectNote = useCallback(
     (publication) => {
       if (!publication) return;
-
       handleNavigate('detail', publication);
     },
     [handleNavigate],
   );
 
-  // Return from the note detail page to the archive.
   const handleBackToArchive = useCallback(() => {
     handleNavigate('notes');
   }, [handleNavigate]);
 
-  // ----------------------------------------------------------
+  // ============================================================
   // Application layout
-  // ----------------------------------------------------------
+  // ============================================================
 
   return (
-    <div className="min-h-screen bg-[#fafaf9] text-neutral-900 transition-colors duration-200 dark:bg-[#0a0a0a] dark:text-neutral-100">
-
+    <div className="flex min-h-screen flex-col bg-[#fafaf9] text-neutral-900 transition-colors duration-200 dark:bg-[#0a0a0a] dark:text-neutral-100">
       {/* Global header */}
       <Header
         currentView={currentView}
@@ -393,17 +320,13 @@ export default function App() {
       />
 
       {/* Main content */}
-      <main>
-        {currentView === 'about' && (
-          <AboutPage
-            onNavigate={handleNavigate}
-          />
-        )}
+      <main className="flex-1">
+        {currentView === 'about' && <AboutPage onNavigate={handleNavigate} />}
+
+        {currentView === 'projects' && <ProjectsPage />}
 
         {currentView === 'notes' && (
-          <ArchivePage
-            onSelectNote={handleSelectNote}
-          />
+          <ArchivePage onSelectNote={handleSelectNote} />
         )}
 
         {currentView === 'detail' && selectedNote && (
@@ -430,6 +353,9 @@ export default function App() {
           </section>
         )}
       </main>
+
+      {/* One shared footer for every top-level page and note detail. */}
+      <Footer />
 
       {/* Global search modal */}
       <SearchModal

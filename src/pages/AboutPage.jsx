@@ -7,7 +7,6 @@ import {
   Globe,
   Mail,
   FileText,
-  ExternalLink,
 } from 'lucide-react';
 
 import { SITE_DATA, UI } from '../data/siteData';
