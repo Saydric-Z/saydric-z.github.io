@@ -136,22 +136,6 @@ export default function App() {
   // Global search modal.
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  // Dark mode preference.
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    try {
-      const savedTheme = window.localStorage.getItem('theme');
-
-      if (savedTheme === 'dark') return true;
-      if (savedTheme === 'light') return false;
-    } catch {
-      // Fall back to the current document theme.
-    }
-
-    return (
-      typeof document !== 'undefined' &&
-      document.documentElement.classList.contains('dark')
-    );
-  });
 
   // Keep noncanonical paths consistent with the resolved route.
   useEffect(() => {
@@ -160,20 +144,16 @@ export default function App() {
     }
   }, [routeState.canonicalPath]);
 
-  // Theme management.
+  // Enforce the site's permanent light theme and clear any legacy class.
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle('dark', isDarkMode);
+    document.documentElement.classList.remove('dark');
+    document.documentElement.style.colorScheme = 'light';
 
     try {
-      window.localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+      window.localStorage.removeItem('theme');
     } catch {
-      // Theme switching still works if storage is unavailable.
+      // The light-only layout does not depend on localStorage.
     }
-  }, [isDarkMode]);
-
-  const handleToggleTheme = useCallback(() => {
-    setIsDarkMode((previous) => !previous);
   }, []);
 
   // ----------------------------------------------------------
@@ -309,18 +289,16 @@ export default function App() {
   // ============================================================
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#fafaf9] text-neutral-900 transition-colors duration-200 dark:bg-[#0a0a0a] dark:text-neutral-100">
+    <div className="flex min-h-screen flex-col bg-[#fafaf9] text-neutral-900">
       {/* Global header */}
       <Header
         currentView={currentView}
-        isDarkMode={isDarkMode}
         onNavigate={handleNavigate}
-        onToggleTheme={handleToggleTheme}
         onOpenSearch={openSearch}
       />
 
-      {/* Main content */}
-      <main className="flex-1">
+      {/* Main content. Each page component owns its own main landmark. */}
+      <div className="flex-1">
         {currentView === 'about' && <AboutPage onNavigate={handleNavigate} />}
 
         {currentView === 'projects' && <ProjectsPage />}
@@ -343,27 +321,29 @@ export default function App() {
               Personal Writing
             </p>
 
-            <h1 className="font-serif text-3xl tracking-tight text-neutral-900 dark:text-neutral-100 sm:text-4xl">
+            <h1 className="font-serif text-3xl tracking-tight text-neutral-900 sm:text-4xl">
               Blogs
             </h1>
 
-            <p className="mt-4 text-sm leading-7 text-neutral-500 dark:text-neutral-400">
+            <p className="mt-4 text-sm leading-7 text-neutral-500">
               Articles and essays are currently being prepared.
             </p>
           </section>
         )}
-      </main>
+      </div>
 
       {/* One shared footer for every top-level page and note detail. */}
       <Footer />
 
-      {/* Global search modal */}
-      <SearchModal
-        isOpen={isSearchOpen}
-        onClose={closeSearch}
-        onSelectNote={handleSelectNote}
-        onNavigate={handleNavigate}
-      />
+      {/* Mount only while open so search state resets on each opening. */}
+      {isSearchOpen && (
+        <SearchModal
+          isOpen={true}
+          onClose={closeSearch}
+          onSelectNote={handleSelectNote}
+          onNavigate={handleNavigate}
+        />
+      )}
     </div>
   );
 }

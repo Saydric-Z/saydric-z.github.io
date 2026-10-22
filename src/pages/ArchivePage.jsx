@@ -1,13 +1,7 @@
 // src/pages/ArchivePage.jsx
 
 import { useMemo, useState } from 'react';
-import { ArrowRight, FileText, Clock } from 'lucide-react';
-
-import {
-  SITE_DATA,
-  CATEGORIES_OVERVIEW,
-  UI,
-} from '../data/siteData';
+import { SITE_DATA, CATEGORIES_OVERVIEW } from '../data/siteData';
 
 // ============================================================
 // Constants
@@ -37,8 +31,12 @@ const MONTHS = {
 };
 
 const FOCUS_RING =
-  UI?.focusRing ??
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fafaf9]';
+
+const FALLBACK_CATEGORIES = DISCIPLINE_ORDER.map((name) => ({
+  id: name.toLowerCase().replace(/\s+/g, '-'),
+  name,
+}));
 
 // ============================================================
 // Date helpers
@@ -59,17 +57,12 @@ function parseDate(value) {
 
   if (value instanceof Date) {
     const timestamp = value.getTime();
-
-    return Number.isFinite(timestamp)
-      ? timestamp
-      : null;
+    return Number.isFinite(timestamp) ? timestamp : null;
   }
 
   const text = String(value).trim();
-
   if (!text) return null;
 
-  // Explicitly parse abbreviated English month formats.
   const normalized = text
     .toUpperCase()
     .replace(/,/g, '')
@@ -82,9 +75,7 @@ function parseDate(value) {
 
   if (monthMatch) {
     const month = MONTHS[monthMatch[1]];
-    const day = monthMatch[2]
-      ? Number(monthMatch[2])
-      : 1;
+    const day = monthMatch[2] ? Number(monthMatch[2]) : 1;
     const year = Number(monthMatch[3]);
 
     if (
@@ -96,11 +87,9 @@ function parseDate(value) {
       return null;
     }
 
-    const parsedDate = new Date(
-      Date.UTC(year, month, day),
-    );
+    const parsedDate = new Date(Date.UTC(year, month, day));
 
-    // Reject invalid dates instead of silently normalizing them.
+    // Reject invalid calendar dates instead of silently normalizing them.
     if (
       parsedDate.getUTCFullYear() !== year ||
       parsedDate.getUTCMonth() !== month ||
@@ -114,15 +103,9 @@ function parseDate(value) {
 
   // Fall back to ISO and other standard browser-supported formats.
   const timestamp = Date.parse(text);
-
-  return Number.isFinite(timestamp)
-    ? timestamp
-    : null;
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-/**
- * Use lastEdited first, then fall back to date.
- */
 function getRevisionTimestamp(publication) {
   return (
     parseDate(publication?.lastEdited) ??
@@ -131,9 +114,6 @@ function getRevisionTimestamp(publication) {
   );
 }
 
-/**
- * Display whichever valid revision date is being used.
- */
 function getRevisionLabel(publication) {
   if (parseDate(publication?.lastEdited) !== null) {
     return publication.lastEdited;
@@ -147,35 +127,36 @@ function getRevisionLabel(publication) {
 }
 
 function normalizeCategory(category) {
-  return String(category || '')
-    .trim()
-    .toLowerCase();
+  return String(category || '').trim().toLowerCase();
 }
 
 function getDisciplineIndex(category) {
   const index = DISCIPLINE_ORDER.findIndex(
     (discipline) =>
-      normalizeCategory(discipline) ===
-      normalizeCategory(category),
+      normalizeCategory(discipline) === normalizeCategory(category),
   );
 
   // Unknown categories appear after the five main disciplines.
   return index === -1 ? 99 : index;
 }
 
+function getPublicationTimestamp(publication) {
+  return parseDate(publication?.date) ?? 0;
+}
+
+function isPublicationPublished(publication) {
+  return Boolean(
+    publication?.htmlUrl || publication?.status === 'published',
+  );
+}
+
 // ============================================================
 // ArchivePage
 // ============================================================
 
-export default function ArchivePage({
-  onNavigate,
-  onSelectNote,
-}) {
-  const [selectedCategory, setSelectedCategory] =
-    useState('All');
-
-  // recent | category
-  const [sortBy, setSortBy] = useState('recent');
+export default function ArchivePage({ onNavigate, onSelectNote }) {
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [sortBy, setSortBy] = useState('recent'); // recent | category
 
   // ----------------------------------------------------------
   // Source data
@@ -189,13 +170,22 @@ export default function ArchivePage({
     [],
   );
 
-  const categories = useMemo(
-    () =>
-      Array.isArray(CATEGORIES_OVERVIEW)
-        ? CATEGORIES_OVERVIEW
-        : [],
-    [],
-  );
+  const categories = useMemo(() => {
+    const source = Array.isArray(CATEGORIES_OVERVIEW)
+      ? CATEGORIES_OVERVIEW
+      : [];
+
+    const validCategories = source
+      .map((category) => ({
+        id: category?.id ?? category?.name ?? category?.title,
+        name: category?.name ?? category?.title,
+      }))
+      .filter((category) => Boolean(category.name));
+
+    return validCategories.length > 0
+      ? validCategories
+      : FALLBACK_CATEGORIES;
+  }, []);
 
   // ----------------------------------------------------------
   // Latest revision date across the entire archive
@@ -209,11 +199,7 @@ export default function ArchivePage({
         timestamp: getRevisionTimestamp(publication),
         label: getRevisionLabel(publication),
       }))
-      .filter(
-        (item) =>
-          item.label !== null &&
-          item.timestamp > 0,
-      );
+      .filter((item) => item.label !== null && item.timestamp > 0);
 
     if (datedPublications.length === 0) {
       return 'No revision date';
@@ -235,7 +221,6 @@ export default function ArchivePage({
   // ----------------------------------------------------------
 
   const processedPublications = useMemo(() => {
-    // Step 1: filter by the selected category.
     const list =
       normalizeCategory(selectedCategory) === 'all'
         ? [...publications]
@@ -245,48 +230,29 @@ export default function ArchivePage({
               normalizeCategory(selectedCategory),
           );
 
-    // Step 2: apply the selected sorting mode.
     list.sort((a, b) => {
       const dateA = getRevisionTimestamp(a);
       const dateB = getRevisionTimestamp(b);
+      const publicationDateA = getPublicationTimestamp(a);
+      const publicationDateB = getPublicationTimestamp(b);
 
       if (sortBy === 'category') {
-        // First: order by the five academic disciplines.
         const orderA = getDisciplineIndex(a?.category);
         const orderB = getDisciplineIndex(b?.category);
 
-        if (orderA !== orderB) {
-          return orderA - orderB;
+        if (orderA !== orderB) return orderA - orderB;
+        if (dateA !== dateB) return dateB - dateA;
+        if (publicationDateA !== publicationDateB) {
+          return publicationDateB - publicationDateA;
         }
+        return String(a?.title ?? '').localeCompare(String(b?.title ?? ''));
+      }
 
-        // Second: sort within each discipline by revision date.
-        if (dateA !== dateB) {
-          return dateB - dateA;
-        }
-
-        // Third: use publication date as a tie-breaker.
-        const publicationDateA =
-          parseDate(a?.date) ?? 0;
-
-        const publicationDateB =
-          parseDate(b?.date) ?? 0;
-
+      if (dateA !== dateB) return dateB - dateA;
+      if (publicationDateA !== publicationDateB) {
         return publicationDateB - publicationDateA;
       }
-
-      // Recently Revised: newest revisions first.
-      if (dateA !== dateB) {
-        return dateB - dateA;
-      }
-
-      // For equal revision dates, prefer newer publication dates.
-      const publicationDateA =
-        parseDate(a?.date) ?? 0;
-
-      const publicationDateB =
-        parseDate(b?.date) ?? 0;
-
-      return publicationDateB - publicationDateA;
+      return String(a?.title ?? '').localeCompare(String(b?.title ?? ''));
     });
 
     return list;
@@ -299,30 +265,32 @@ export default function ArchivePage({
   const openPublication = (publication) => {
     if (!publication) return;
 
-    // Preferred selection callback used by App.jsx.
     if (typeof onSelectNote === 'function') {
       onSelectNote(publication);
       return;
     }
 
-    // Compatibility with callers using the navigation handler.
+    // Backwards-compatible fallback for callers that expose route navigation.
     if (typeof onNavigate === 'function') {
       onNavigate('detail', publication);
+      return;
+    }
+
+    // If this component is used without the SPA handlers, open a published
+    // HTML note directly when a destination is available.
+    if (publication?.htmlUrl && typeof window !== 'undefined') {
+      window.location.assign(publication.htmlUrl);
     }
   };
-
-  // ----------------------------------------------------------
-  // Segmented toggle styles
-  // ----------------------------------------------------------
 
   const getSortButtonClass = (isActive) =>
     [
       'cursor-pointer rounded-md px-2.5 py-1',
-      'font-mono text-[11px] transition-all duration-200',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400',
+      'font-mono text-[11px] transition-colors duration-200',
+      FOCUS_RING,
       isActive
-        ? 'bg-white font-medium text-neutral-900 shadow-sm dark:bg-neutral-800 dark:text-neutral-100'
-        : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-300',
+        ? 'bg-white font-medium text-neutral-900 shadow-sm'
+        : 'text-neutral-500 hover:bg-neutral-100/70 hover:text-neutral-900',
     ].join(' ');
 
   // ----------------------------------------------------------
@@ -332,139 +300,105 @@ export default function ArchivePage({
   return (
     <main className="mx-auto w-full max-w-[1180px] px-6 py-12 sm:px-8 sm:py-16 lg:px-12 lg:py-20">
       <div className="space-y-10 md:space-y-12">
-
-        {/* ====================================================
-            Page heading
-            ==================================================== */}
-
+        {/* Page heading */}
         <section>
-          <p className="mb-4 font-mono text-xs uppercase tracking-widest text-neutral-400">
+          <p className="mb-4 font-mono text-xs uppercase tracking-widest text-neutral-500">
             Knowledge Repository
           </p>
 
-          <h1 className="font-serif text-3xl tracking-tight text-neutral-900 sm:text-4xl md:text-5xl dark:text-neutral-50">
+          <h1 className="font-serif text-3xl tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
             Academic Archive
           </h1>
 
-          <p className="mt-4 max-w-2xl text-base leading-relaxed text-neutral-600 dark:text-neutral-400">
-            Browse notes across pure mathematics, applied mathematics,
-            statistics, computer science, and optimization.
-          </p>
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <p className="max-w-2xl text-base leading-relaxed text-neutral-700">
+              Browse notes across pure mathematics, applied mathematics,
+              statistics, computer science, and optimization.
+            </p>
+
+            <p className="shrink-0 font-mono text-xs uppercase tracking-wider text-neutral-500">
+              {String(publications.length).padStart(2, '0')} Total Records
+            </p>
+          </div>
         </section>
 
-        {/* ====================================================
-            Category filters
-            ==================================================== */}
-
+        {/* Category filters */}
         <section aria-label="Filter publications by category">
           <div className="mb-5 flex items-center justify-between gap-4">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-neutral-400">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-neutral-500">
               Browse by discipline
             </h2>
 
-            <span className="font-mono text-xs text-neutral-400">
-              {categories.length} CATEGORIES
+            <span className="font-mono text-xs text-neutral-500">
+              {String(categories.length).padStart(2, '0')} CATEGORIES
             </span>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            {/* All categories */}
+          <div className="flex flex-wrap gap-2 border-y border-neutral-200 py-4">
             <button
               type="button"
               onClick={() => setSelectedCategory('All')}
-              aria-pressed={
+              aria-pressed={normalizeCategory(selectedCategory) === 'all'}
+              className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm transition-colors duration-200 ${FOCUS_RING} ${
                 normalizeCategory(selectedCategory) === 'all'
-              }
-              className={`
-                cursor-pointer rounded-full border px-4 py-2 text-sm font-medium
-                transition-colors duration-200
-                ${
-                  normalizeCategory(selectedCategory) === 'all'
-                    ? 'border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950'
-                    : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400 hover:text-neutral-950 dark:border-neutral-800 dark:bg-transparent dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:text-white'
-                }
-                ${FOCUS_RING}
-              `}
+                  ? 'border-neutral-900 bg-neutral-900 text-white'
+                  : 'border-neutral-200 bg-transparent text-neutral-600 hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-900'
+              }`}
             >
               All
             </button>
 
-            {categories.map((cat, index) => {
+            {categories.map((category, index) => {
+              const categoryName = category?.name;
+              if (!categoryName) return null;
+
               const isSelected =
                 normalizeCategory(selectedCategory) ===
-                normalizeCategory(cat.name);
+                normalizeCategory(categoryName);
 
               return (
                 <button
-                  key={cat.id || cat.name || index}
+                  key={category?.id ?? categoryName ?? index}
                   type="button"
-                  onClick={() => setSelectedCategory(cat.name)}
+                  onClick={() => setSelectedCategory(categoryName)}
                   aria-pressed={isSelected}
-                  className={`
-                    cursor-pointer rounded-full border px-4 py-2 text-sm font-medium
-                    transition-colors duration-200
-                    ${
-                      isSelected
-                        ? 'border-neutral-950 bg-neutral-950 text-white dark:border-white dark:bg-white dark:text-neutral-950'
-                        : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400 hover:text-neutral-950 dark:border-neutral-800 dark:bg-transparent dark:text-neutral-300 dark:hover:border-neutral-600 dark:hover:text-white'
-                    }
-                    ${FOCUS_RING}
-                  `}
+                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm transition-colors duration-200 ${FOCUS_RING} ${
+                    isSelected
+                      ? 'border-neutral-900 bg-neutral-900 text-white'
+                      : 'border-neutral-200 bg-transparent text-neutral-600 hover:border-neutral-400 hover:bg-neutral-50 hover:text-neutral-900'
+                  }`}
                 >
-                  {cat.name}
+                  {categoryName}
                 </button>
               );
             })}
           </div>
         </section>
 
-        {/* ====================================================
-            Result count, revision date, and sorting controls
-            ==================================================== */}
+        {/* Result count, latest revision, and sorting controls */}
+        <section aria-live="polite" aria-atomic="true">
+          <div className="flex flex-col gap-4 border-b border-neutral-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <h2 className="font-mono text-xs uppercase tracking-widest text-neutral-500">
+                SHOWING {processedPublications.length} RECORDS
+              </h2>
 
-        <section>
-          <div className="flex flex-col gap-4 border-b border-neutral-200 pb-4 dark:border-neutral-800 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-neutral-500 dark:text-neutral-400">
-              SHOWING {processedPublications.length} RECORDS
-            </h2>
-
-            <div className="flex flex-wrap items-center gap-3 font-mono text-[11px] text-neutral-400">
-              {/* Latest revision indicator: Clock is actively used */}
-              <span className="inline-flex items-center gap-1.5">
-                <Clock
-                  className="h-3.5 w-3.5 shrink-0"
-                  aria-hidden="true"
-                />
-
-                <span className="hidden sm:inline">
-                  Latest Revision: {latestRevisionDate}
-                </span>
-
-                <span className="sm:hidden">
-                  Rev. {latestRevisionDate}
-                </span>
+              <span className="font-mono text-[11px] uppercase tracking-wide text-neutral-500">
+                Latest revision: {latestRevisionDate}
               </span>
+            </div>
 
-              <span
-                className="hidden text-neutral-200 dark:text-neutral-800 sm:inline"
-                aria-hidden="true"
-              >
-                /
-              </span>
-
-              {/* Segmented sorting toggle */}
+            <div className="flex flex-wrap items-center gap-3">
               <div
                 role="group"
                 aria-label="Sort publications"
-                className="flex items-center gap-1 rounded-lg border border-neutral-200/60 bg-neutral-50 p-0.5 dark:border-neutral-800 dark:bg-neutral-900/60"
+                className="flex items-center gap-1 rounded-lg border border-neutral-200/80 bg-neutral-100/60 p-0.5"
               >
                 <button
                   type="button"
                   onClick={() => setSortBy('recent')}
                   aria-pressed={sortBy === 'recent'}
-                  className={getSortButtonClass(
-                    sortBy === 'recent',
-                  )}
+                  className={getSortButtonClass(sortBy === 'recent')}
                 >
                   Recently Revised
                 </button>
@@ -473,9 +407,7 @@ export default function ArchivePage({
                   type="button"
                   onClick={() => setSortBy('category')}
                   aria-pressed={sortBy === 'category'}
-                  className={getSortButtonClass(
-                    sortBy === 'category',
-                  )}
+                  className={getSortButtonClass(sortBy === 'category')}
                 >
                   By Discipline
                 </button>
@@ -485,7 +417,7 @@ export default function ArchivePage({
                 <button
                   type="button"
                   onClick={() => setSelectedCategory('All')}
-                  className={`cursor-pointer text-xs text-neutral-500 underline underline-offset-4 transition-colors hover:text-neutral-950 dark:text-neutral-400 dark:hover:text-white ${FOCUS_RING}`}
+                  className={`cursor-pointer text-xs text-neutral-500 underline underline-offset-4 transition-colors hover:text-neutral-900 ${FOCUS_RING}`}
                 >
                   Clear filter
                 </button>
@@ -493,122 +425,118 @@ export default function ArchivePage({
             </div>
           </div>
 
-          {/* ==================================================
-              Publication list
-              ================================================== */}
-
+          {/* Publication list */}
           {processedPublications.length > 0 ? (
-            <div className="divide-y divide-neutral-200 dark:divide-neutral-800">
-              {processedPublications.map((publication, index) => (
-                <button
-                  key={publication?.id ?? index}
-                  type="button"
-                  onClick={() => openPublication(publication)}
-                  aria-label={`Open ${publication?.title || 'Untitled Note'}`}
-                  className={`
-                    group grid w-full cursor-pointer grid-cols-1 gap-4 py-6
-                    text-left transition-colors duration-200
-                    hover:bg-neutral-50/70 sm:py-7
-                    md:grid-cols-[minmax(0,1fr)_auto]
-                    md:items-center md:gap-8
-                    dark:hover:bg-white/[0.025]
-                    ${FOCUS_RING}
-                  `}
-                >
-                  <div className="min-w-0">
-                    <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-                      <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-400">
-                        {publication?.category ?? 'Uncategorized'}
-                      </span>
+            <div className="mt-2">
+              {processedPublications.map((publication, index) => {
+                const isPublished = isPublicationPublished(publication);
+                const revisionLabel = getRevisionLabel(publication);
+                const statusLabel = isPublished
+                  ? 'PUBLISHED'
+                  : 'IN PROGRESS';
 
-                      <span
-                        className="h-1 w-1 rounded-full bg-neutral-300 dark:bg-neutral-700"
-                        aria-hidden="true"
-                      />
+                return (
+                  <article
+                    key={publication?.id ?? `${publication?.title ?? 'note'}-${index}`}
+                    className="border-b border-neutral-200/80 last:border-b-0"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => openPublication(publication)}
+                      aria-label={`Open ${publication?.title || 'Untitled Note'}`}
+                      className={`group -mx-6 flex w-[calc(100%_+_3rem)] cursor-pointer flex-col gap-4 rounded-2xl border border-transparent p-6 text-left transition-all duration-200 hover:border-neutral-200/80 hover:bg-neutral-100/90 hover:shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:py-6 ${FOCUS_RING}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                          <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+                            {publication?.category ?? 'Uncategorized'}
+                          </span>
 
-                      <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-400">
-                        {publication?.date ?? 'Undated'}
-                      </span>
+                          <span className="text-neutral-300" aria-hidden="true">
+                            /
+                          </span>
 
-                      {publication?.lastEdited &&
-                        publication.lastEdited !== publication.date && (
-                          <>
-                            <span
-                              className="h-1 w-1 rounded-full bg-neutral-300 dark:bg-neutral-700"
-                              aria-hidden="true"
-                            />
+                          <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+                            {publication?.date ?? 'Undated'}
+                          </span>
 
-                            <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-400">
-                              Updated {publication.lastEdited}
-                            </span>
-                          </>
+                          {revisionLabel &&
+                            publication?.lastEdited &&
+                            publication.lastEdited !== publication.date && (
+                              <>
+                                <span className="text-neutral-300" aria-hidden="true">
+                                  /
+                                </span>
+
+                                <span className="font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+                                  Updated {revisionLabel}
+                                </span>
+                              </>
+                            )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                          <h3 className="font-serif text-xl font-semibold leading-snug tracking-tight text-neutral-800 transition-colors duration-200 group-hover:text-neutral-950 sm:text-2xl">
+                            {publication?.title ?? 'Untitled Note'}
+                          </h3>
+
+                          <span
+                            className={`inline-flex shrink-0 rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                              isPublished
+                                ? 'border-neutral-300 text-neutral-700'
+                                : 'border-neutral-200 text-neutral-500'
+                            }`}
+                          >
+                            [{statusLabel}]
+                          </span>
+                        </div>
+
+                        {(publication?.summary || publication?.abstract) && (
+                          <p className="mt-3 max-w-[76ch] text-sm leading-relaxed text-neutral-700 md:text-base">
+                            {publication.summary || publication.abstract}
+                          </p>
                         )}
 
-                      {/* Publication status */}
-                      {publication?.htmlUrl ? (
-                        <span className="rounded-full border border-neutral-300 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">
-                          Published
-                        </span>
-                      ) : (
-                        <span className="rounded-full border border-neutral-200 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-neutral-400 dark:border-neutral-800 dark:text-neutral-500">
-                          In Progress
-                        </span>
-                      )}
-                    </div>
+                        {publication?.readingTime &&
+                          !String(publication.readingTime)
+                            .toLowerCase()
+                            .includes('in progress') && (
+                            <p className="mt-4 font-mono text-[11px] uppercase tracking-wider text-neutral-500">
+                              {publication.readingTime}
+                            </p>
+                          )}
+                      </div>
 
-                    <h3 className="font-serif text-xl font-semibold leading-snug text-neutral-900 transition-colors group-hover:text-neutral-600 sm:text-2xl dark:text-neutral-100 dark:group-hover:text-neutral-300">
-                      {publication?.title ?? 'Untitled Note'}
-                    </h3>
-
-                    {(publication?.summary ||
-                      publication?.abstract) && (
-                      <p className="mt-3 max-w-3xl text-sm leading-relaxed text-neutral-600 md:text-base dark:text-neutral-400">
-                        {publication.summary ||
-                          publication.abstract}
-                      </p>
-                    )}
-
-                    {publication?.readingTime && (
-                      <p className="mt-4 font-mono text-[11px] uppercase tracking-wider text-neutral-400">
-                        {publication.readingTime}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between gap-3 text-neutral-400 transition-colors group-hover:text-neutral-900 md:justify-end dark:group-hover:text-white">
-                    <span className="inline-flex items-center gap-2 text-xs md:hidden">
-                      <FileText
-                        className="h-4 w-4"
+                      <span
                         aria-hidden="true"
-                      />
-
-                      View note
-                    </span>
-
-                    <ArrowRight
-                      className="h-5 w-5 shrink-0 transition-transform duration-200 group-hover:translate-x-1"
-                      aria-hidden="true"
-                    />
-                  </div>
-                </button>
-              ))}
+                        className="flex shrink-0 items-center justify-between gap-3 font-mono text-neutral-400 transition-colors duration-200 group-hover:text-neutral-900 sm:justify-end"
+                      >
+                        <span className="text-xs text-neutral-500 transition-colors duration-200 group-hover:text-neutral-900 sm:hidden">
+                          {isPublished ? 'Read notes' : 'View entry'}
+                        </span>
+                        <span className="inline-block text-lg leading-none transition-all duration-200 group-hover:translate-x-1.5">
+                          →
+                        </span>
+                      </span>
+                    </button>
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <div className="py-16 text-center">
-              <FileText className="mx-auto mb-4 h-7 w-7 text-neutral-300 dark:text-neutral-700" />
-
-              <h3 className="font-serif text-xl text-neutral-900 dark:text-neutral-100">
+              <p className="font-serif text-xl text-neutral-900">
                 No notes in this category yet
-              </h3>
+              </p>
 
-              <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+              <p className="mt-2 text-sm text-neutral-600">
                 Try another discipline or view the full archive.
               </p>
 
               <button
                 type="button"
                 onClick={() => setSelectedCategory('All')}
-                className={`mt-5 cursor-pointer text-sm underline underline-offset-4 ${FOCUS_RING}`}
+                className={`mt-5 cursor-pointer text-sm text-neutral-700 underline underline-offset-4 transition-colors hover:text-neutral-950 ${FOCUS_RING}`}
               >
                 Show all records
               </button>

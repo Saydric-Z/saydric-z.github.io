@@ -1,18 +1,7 @@
-import { useState, useCallback } from 'react';
-import {
-  ArrowRight,
-  Check,
-  Copy,
-  Sparkles,
-  Globe,
-  Mail,
-  FileText,
-} from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { SITE_DATA } from '../data/siteData';
 
-import { SITE_DATA, UI } from '../data/siteData';
-
-// Brand marks are defined inline so this file does not depend on brand exports
-// from lucide-react. Both icons inherit their color from the current text color.
+// Inline GitHub brand mark avoids relying on a brand icon export.
 function Github({ className, ...props }) {
   return (
     <svg
@@ -31,61 +20,35 @@ function Github({ className, ...props }) {
   );
 }
 
-function Linkedin({ className, ...props }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-      {...props}
-    >
-      <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.35V9h3.414v1.561h.049c.476-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.124 2.062 2.062 0 0 1 0 4.124zM6.96 20.452H3.71V9h3.25v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z" />
-    </svg>
-  );
-}
-
 const FOCUS_RING =
-  UI?.focusRing ??
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-neutral-950';
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#fafaf9]';
 
 export default function AboutPage({ onNavigate }) {
   const [copiedId, setCopiedId] = useState(null);
   const [avatarFailed, setAvatarFailed] = useState(false);
 
-  // ------------------------------------------------------------
-  // Safe data access
-  // ------------------------------------------------------------
+  const profile = SITE_DATA?.profile ?? {};
 
-  const profile = SITE_DATA?.profile;
-
-  const researchAreas = Array.isArray(profile?.researchAreas)
+  const researchAreas = Array.isArray(profile.researchAreas)
     ? profile.researchAreas
     : [];
 
-  const contacts = Array.isArray(profile?.contacts)
+  const contacts = Array.isArray(profile.contacts)
     ? profile.contacts
     : [];
 
-  const bio = Array.isArray(profile?.bio)
-    ? profile.bio
-    : [];
+  const bio = Array.isArray(profile.bio) ? profile.bio : [];
+  const domain = profile.domain ?? 'COMPUTER SCIENCE & STATISTICS';
+  const edition = profile.edition ?? '2026';
 
-  // 互换顺序：Computer Science 放在 Statistics 前面
-  const domain =
-    profile?.domain ??
-    'COMPUTER SCIENCE & STATISTICS';
-
-  const edition = profile?.edition ?? '2026';
-
-  // Optional profile links are read from siteData when available.
+  // Match contact records by label or id, case-insensitively.
   const findContact = (...terms) =>
     contacts.find((contact) =>
       terms.some((term) =>
         String(contact?.label ?? contact?.id ?? '')
           .toLowerCase()
-          .includes(term)
-      )
+          .includes(term),
+      ),
     );
 
   const githubContact = findContact('github');
@@ -96,32 +59,37 @@ export default function AboutPage({ onNavigate }) {
   const resolveLink = (contact, fallback = '') => {
     const raw = contact?.url ?? contact?.href ?? contact?.value ?? fallback;
     if (!raw) return '';
+
     const value = String(raw).trim();
+    if (!value) return '';
+
     if (/^(https?:|mailto:|tel:|\/)/i.test(value)) return value;
     if (value.includes('@')) return `mailto:${value}`;
-    return fallback;
+
+    if (/^(www\.)?(github\.com|linkedin\.com)\//i.test(value)) {
+      return `https://${value}`;
+    }
+
+    return '';
   };
 
   const quickLinks = [
     {
       label: 'GitHub',
       href: resolveLink(githubContact, 'https://github.com/saydric-z'),
-      Icon: Github,
+      isGitHub: true,
     },
     {
       label: 'LinkedIn',
-      href: resolveLink(linkedinContact, profile?.linkedinUrl ?? profile?.linkedin ?? ''),
-      Icon: Linkedin,
+      href: resolveLink(
+        linkedinContact,
+        profile.linkedinUrl ?? profile.linkedin ?? '',
+      ),
     },
-    {
-      label: 'Email',
-      href: resolveLink(emailContact),
-      Icon: Mail,
-    },
+    { label: 'Email', href: resolveLink(emailContact) },
     {
       label: 'CV',
-      href: resolveLink(cvContact, profile?.cvUrl ?? profile?.cv ?? '/cv.pdf'),
-      Icon: FileText,
+      href: resolveLink(cvContact, profile.cvUrl ?? profile.cv ?? ''),
     },
   ].filter((link) => Boolean(link.href));
 
@@ -129,94 +97,35 @@ export default function AboutPage({ onNavigate }) {
     'Statistical Inference',
     'Stochastic Calculus',
     'Statistical Learning',
-    'Machine Learning'
+    'Machine Learning',
   ];
-
-  // ------------------------------------------------------------
-  // Clipboard
-  // ------------------------------------------------------------
 
   const handleCopy = useCallback(async (id, value) => {
     try {
       await navigator.clipboard.writeText(String(value ?? ''));
-
       setCopiedId(id);
 
       window.setTimeout(() => {
-        setCopiedId((currentId) =>
-          currentId === id ? null : currentId
-        );
-      }, 2000);
+        setCopiedId((currentId) => (currentId === id ? null : currentId));
+      }, 1800);
     } catch (error) {
-      console.warn('Clipboard failed:', error);
+      console.warn('Clipboard copy failed:', error);
     }
   }, []);
 
-  // ------------------------------------------------------------
-  // Navigation
-  // ------------------------------------------------------------
-
-  const navigateToNotes = () => {
-    onNavigate?.('notes');
-  };
-
-  // ------------------------------------------------------------
-  // Page
-  // ------------------------------------------------------------
-
   return (
-    <main
-      className="
-        mx-auto
-        w-full
-        max-w-[1180px]
-        px-6
-        py-12
-        sm:px-8
-        sm:py-16
-        lg:px-12
-        lg:py-20
-      "
-    >
+    <main className="mx-auto w-full max-w-[1180px] px-6 py-12 sm:px-8 sm:py-16 lg:px-12 lg:py-20">
       <div className="space-y-16 md:space-y-20">
-
-        {/* ======================================================
-            INTRODUCTION
-        ====================================================== */}
-
+        {/* Introduction */}
         <section className="w-full">
           <div className="grid grid-cols-1 items-start gap-10 md:grid-cols-12 md:gap-12 lg:gap-16">
-            
-            {/* Personal profile column */}
+            {/* Profile column */}
             <aside className="mx-auto w-full max-w-[320px] md:col-span-4 md:mx-0 md:max-w-none">
-              {/* Editorial portrait */}
-              <div
-                className="
-                  overflow-hidden
-                  rounded-xl
-                  border
-                  border-neutral-200/80
-                  bg-neutral-50
-                  shadow-sm
-                  dark:border-neutral-800
-                  dark:bg-neutral-900
-                "
-              >
+              <div className="overflow-hidden rounded-xl border border-neutral-200/80 bg-white/60">
                 <div className="aspect-[4/5] overflow-hidden">
                   {avatarFailed ? (
                     <div
-                      className="
-                        flex
-                        h-full
-                        w-full
-                        items-center
-                        justify-center
-                        font-serif
-                        text-5xl
-                        tracking-tight
-                        text-neutral-400
-                        dark:text-neutral-600
-                      "
+                      className="flex h-full w-full items-center justify-center font-serif text-5xl tracking-tight text-neutral-400"
                       role="img"
                       aria-label="Portrait placeholder for Saydric Zheng"
                     >
@@ -227,12 +136,7 @@ export default function AboutPage({ onNavigate }) {
                       src="/avatar.jpg"
                       alt="Portrait of Saydric Zheng"
                       onError={() => setAvatarFailed(true)}
-                      className="
-                        h-full
-                        w-full
-                        object-cover
-                        object-[center_18%]
-                      "
+                      className="h-full w-full object-cover object-[center_18%]"
                       loading="eager"
                       decoding="async"
                     />
@@ -240,41 +144,40 @@ export default function AboutPage({ onNavigate }) {
                 </div>
               </div>
 
-              {/* 肖像下方的个人信息卡片 */}
               <div className="mt-5 space-y-4">
                 <div>
-                  <h2 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-100">
-                    Saydric Zheng
+                  <h2 className="font-serif text-xl font-bold tracking-tight text-neutral-900">
+                    Saydric Zheng.
                   </h2>
-                  <p className="mt-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+                  <p className="mt-1 text-sm text-neutral-500">
                     CS &amp; Statistics · UWaterloo
                   </p>
                 </div>
 
-                {/* 研究领域标签 */}
                 <div className="flex flex-wrap gap-1.5">
                   {researchTags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-400"
+                      className="rounded-sm border border-neutral-300 bg-transparent px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-neutral-600"
                     >
                       #{tag}
                     </span>
                   ))}
                 </div>
 
-                {/* 快捷链接 */}
                 {quickLinks.length > 0 && (
-                  <div className="flex items-center gap-4 border-t border-neutral-200/60 pt-4 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
-                    {quickLinks.map(({ label, href, Icon }) => (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-200/80 pt-4 text-xs text-neutral-600">
+                    {quickLinks.map(({ label, href, isGitHub }) => (
                       <a
                         key={label}
                         href={href}
                         target={href.startsWith('http') ? '_blank' : undefined}
                         rel={href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                        className="flex items-center gap-1.5 transition-colors hover:text-neutral-900 dark:hover:text-neutral-100"
+                        className={`inline-flex items-center gap-1.5 transition-colors hover:text-[#1e3a5f] ${FOCUS_RING}`}
                       >
-                        <Icon className="h-3.5 w-3.5" />
+                        {isGitHub && (
+                          <Github className="h-3.5 w-3.5" aria-hidden="true" />
+                        )}
                         <span>{label}</span>
                       </a>
                     ))}
@@ -283,24 +186,19 @@ export default function AboutPage({ onNavigate }) {
               </div>
             </aside>
 
-            {/* Biography and existing page actions */}
+            {/* Biography column */}
             <div className="min-w-0 md:col-span-8">
-              {/* Academic field / domain */}
-              <p className="mb-5 font-mono text-xs uppercase tracking-widest text-neutral-400">
+              <p className="mb-5 font-mono text-xs uppercase tracking-[0.16em] text-neutral-500">
                 {domain}
               </p>
 
-              {/* Main heading */}
-              <h1
-                className="mb-7 font-serif text-3xl font-normal leading-tight tracking-tight text-neutral-900 sm:text-4xl md:text-5xl dark:text-neutral-50"
-              >
+              <h1 className="mb-7 font-serif text-3xl font-normal leading-tight tracking-tight text-neutral-900 sm:text-4xl md:text-5xl">
                 Hello, I am{' '}
                 <span className="font-semibold">Saydric Zheng.</span>
               </h1>
 
-              {/* Preserve every biography paragraph from siteData */}
               {bio.length > 0 && (
-                <div className="w-full space-y-5 font-serif text-base leading-[1.85] text-neutral-600 md:text-[17px] dark:text-neutral-400">
+                <div className="about-bio w-full max-w-[68ch] space-y-5 font-serif text-base leading-[1.8] text-neutral-700 md:text-[17px] [&_a]:underline [&_a]:underline-offset-4 [&_a]:transition-colors [&_a:hover]:text-[#1e3a5f]">
                   {bio.map((paragraph, index) => (
                     <p
                       key={`bio-${index}`}
@@ -310,312 +208,112 @@ export default function AboutPage({ onNavigate }) {
                 </div>
               )}
 
-              {/* Edition and navigation */}
-              <div className="mt-10 flex flex-col gap-4 border-y border-neutral-200 py-5 sm:flex-row sm:items-center sm:justify-between dark:border-neutral-800">
-                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-neutral-400 sm:text-xs">
+              <div className="mt-10 flex flex-col gap-4 border-y border-neutral-200 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-neutral-500 sm:text-xs">
                   <span>
                     FOCUS: ANALYSIS &amp; KERNELS{' · '}{edition}
                   </span>
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 </div>
 
+                {/* Directly call the App navigation handler. */}
                 <button
                   type="button"
-                  onClick={navigateToNotes}
-                  className={`group inline-flex w-fit items-center gap-2 text-sm font-medium text-neutral-900 underline underline-offset-4 transition-colors duration-200 hover:text-neutral-500 dark:text-neutral-100 dark:hover:text-neutral-300 ${FOCUS_RING}`}
+                  onClick={() => onNavigate?.('notes')}
+                  className={`group inline-flex w-fit cursor-pointer items-center gap-1.5 font-serif text-sm font-medium text-neutral-900 no-underline transition-colors duration-200 hover:text-[#1e3a5f] hover:underline hover:underline-offset-4 ${FOCUS_RING}`}
                 >
                   <span>Explore Academic Notes</span>
-                  <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" aria-hidden="true" />
+                  <span className="font-mono transition-transform duration-200 group-hover:translate-x-1">
+                    →
+                  </span>
                 </button>
               </div>
             </div>
           </div>
         </section>
 
-        {/* ======================================================
-            RESEARCH DIRECTIONS
-        ====================================================== */}
-
+        {/* Research directions */}
         {researchAreas.length > 0 && (
           <section className="w-full">
-            <div
-              className="
-                mb-6
-                flex
-                flex-col
-                gap-2
-                sm:flex-row
-                sm:items-baseline
-                sm:justify-between
-              "
-            >
-              <h2
-                className="
-                  font-mono
-                  text-xs
-                  uppercase
-                  tracking-widest
-                  text-neutral-400
-                "
-              >
+            <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+              <h2 className="font-mono text-xs uppercase tracking-[0.16em] text-neutral-500">
                 Research Directions
               </h2>
-
-              <span className="font-mono text-xs text-neutral-400">
-                {String(researchAreas.length).padStart(2, '0')}
-                {' PILLARS'}
+              <span className="font-mono text-xs text-neutral-500">
+                {String(researchAreas.length).padStart(2, '0')} PILLARS
               </span>
             </div>
 
-            <div className="border-t border-neutral-200 dark:border-neutral-800">
+            <div className="border-t border-neutral-200">
               {researchAreas.map((area, index) => (
                 <button
                   key={area?.id ?? area?.title ?? index}
                   type="button"
-                  onClick={navigateToNotes}
-                  className={`
-                    group
-                    grid
-                    w-full
-                    grid-cols-1
-                    items-start
-                    gap-4
-                    border-b
-                    border-neutral-200
-                    py-6
-                    text-left
-                    transition-colors
-                    duration-200
-                    hover:bg-neutral-50/80
-                    sm:py-7
-                    md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.7fr)_24px]
-                    md:items-center
-                    md:gap-6
-                    lg:gap-8
-                    dark:border-neutral-800
-                    dark:hover:bg-white/[0.025]
-                    ${FOCUS_RING}
-                  `}
+                  onClick={() => onNavigate?.('notes')}
+                  className={`group grid w-full cursor-pointer grid-cols-1 items-start gap-4 border-b border-neutral-200 py-6 text-left transition-colors duration-200 hover:bg-neutral-50/80 sm:py-7 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.7fr)_24px] md:items-center md:gap-6 lg:gap-8 ${FOCUS_RING}`}
                 >
-                  {/* Left: index and research title */}
-                  <div
-                    className="
-                      grid
-                      min-w-0
-                      grid-cols-[32px_minmax(0,1fr)]
-                      items-start
-                      gap-3
-                    "
-                  >
-                    <span
-                      className="
-                        mt-1
-                        font-mono
-                        text-xs
-                        tabular-nums
-                        text-neutral-400
-                      "
-                    >
-                      {area?.index ??
-                        String(index + 1).padStart(2, '0')}
+                  <div className="grid min-w-0 grid-cols-[32px_minmax(0,1fr)] items-start gap-3">
+                    <span className="mt-1 font-mono text-xs tabular-nums text-neutral-500">
+                      {area?.index ?? String(index + 1).padStart(2, '0')}
                     </span>
-
-                    <h3
-                      className="
-                        min-w-0
-                        font-serif
-                        text-lg
-                        font-semibold
-                        leading-snug
-                        text-neutral-900
-                        transition-colors
-                        duration-200
-                        group-hover:text-neutral-600
-                        sm:text-xl
-                        dark:text-neutral-100
-                        dark:group-hover:text-neutral-300
-                      "
-                    >
+                    <h3 className="min-w-0 font-serif text-lg font-semibold leading-snug text-neutral-900 transition-colors duration-200 group-hover:text-[#1e3a5f] sm:text-xl">
                       {area?.title ?? 'Untitled Research Area'}
                     </h3>
                   </div>
 
-                  {/* Right: description */}
-                  <p
-                    className="
-                      min-w-0
-                      text-sm
-                      leading-relaxed
-                      text-neutral-600
-                      md:text-base
-                      dark:text-neutral-400
-                    "
-                  >
+                  <p className="min-w-0 text-sm leading-relaxed text-neutral-700 md:text-base">
                     {area?.description ?? ''}
                   </p>
 
-                  {/* Arrow */}
-                  <div
-                    className="
-                      hidden
-                      justify-self-end
-                      text-neutral-400
-                      transition-colors
-                      duration-200
-                      group-hover:text-neutral-900
-                      md:flex
-                      dark:group-hover:text-neutral-100
-                    "
+                  <span
+                    aria-hidden="true"
+                    className="hidden justify-self-end font-mono text-neutral-400 transition-all duration-200 group-hover:translate-x-1 group-hover:text-[#1e3a5f] md:block"
                   >
-                    <ArrowRight
-                      className="
-                        h-4
-                        w-4
-                        transition-transform
-                        duration-200
-                        group-hover:translate-x-1
-                      "
-                      aria-hidden="true"
-                    />
-                  </div>
+                    →
+                  </span>
                 </button>
               ))}
             </div>
           </section>
         )}
 
-        {/* ======================================================
-            CONTACTS
-        ====================================================== */}
-
+        {/* Contacts */}
         {contacts.length > 0 && (
           <section className="w-full pb-8">
             <div className="mb-6">
-              <h2
-                className="
-                  font-mono
-                  text-xs
-                  uppercase
-                  tracking-widest
-                  text-neutral-400
-                "
-              >
+              <h2 className="font-mono text-xs uppercase tracking-[0.16em] text-neutral-500">
                 Direct Inquiries &amp; Coordinates
               </h2>
             </div>
 
-            <div className="border-t border-neutral-200 dark:border-neutral-800">
+            <div className="border-t border-neutral-200">
               {contacts.map((contact, index) => {
-                const Icon = contact?.icon ?? Globe;
-                const isCopied = copiedId === contact?.id;
+                const contactId = contact?.id ?? index;
+                const isCopied = copiedId === contactId;
 
                 return (
                   <button
                     key={contact?.id ?? index}
                     type="button"
-                    onClick={() =>
-                      handleCopy(
-                        contact?.id ?? index,
-                        contact?.value ?? ''
-                      )
-                    }
+                    onClick={() => handleCopy(contactId, contact?.value ?? '')}
                     aria-label={
                       isCopied
                         ? `Copied ${contact?.label ?? 'contact'}`
                         : `Copy ${contact?.label ?? 'contact'}`
                     }
-                    className={`
-                      group
-                      grid
-                      w-full
-                      grid-cols-1
-                      items-start
-                      gap-3
-                      border-b
-                      border-neutral-200
-                      py-5
-                      text-left
-                      transition-colors
-                      duration-200
-                      hover:bg-neutral-50/80
-                      sm:py-6
-                      md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.5fr)_auto]
-                      md:items-center
-                      md:gap-6
-                      dark:border-neutral-800
-                      dark:hover:bg-white/[0.025]
-                      ${FOCUS_RING}
-                    `}
+                    className={`group grid w-full cursor-pointer grid-cols-1 items-start gap-3 border-b border-neutral-200 py-5 text-left transition-colors duration-200 hover:bg-neutral-50/80 sm:py-6 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.5fr)_auto] md:items-center md:gap-6 ${FOCUS_RING}`}
                   >
-                    {/* Contact label */}
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Icon
-                        className="h-4 w-4 shrink-0 text-neutral-400"
-                        aria-hidden="true"
-                      />
-
-                      <span
-                        className="
-                          text-xs
-                          uppercase
-                          tracking-widest
-                          text-neutral-500
-                          dark:text-neutral-400
-                        "
-                      >
+                    <div className="min-w-0">
+                      <span className="text-xs uppercase tracking-widest text-neutral-500">
                         {contact?.label ?? 'Contact'}
                       </span>
                     </div>
 
-                    {/* Contact value */}
-                    <span
-                      className="
-                        min-w-0
-                        break-words
-                        font-serif
-                        text-base
-                        text-neutral-900
-                        sm:text-lg
-                        dark:text-neutral-100
-                      "
-                    >
+                    <span className="min-w-0 break-words font-serif text-base text-neutral-900 sm:text-lg">
                       {contact?.value ?? ''}
                     </span>
 
-                    {/* Copy status */}
-                    <span
-                      className="
-                        inline-flex
-                        items-center
-                        gap-2
-                        font-mono
-                        text-[11px]
-                        tracking-wider
-                        text-neutral-400
-                        transition-colors
-                        duration-200
-                        group-hover:text-neutral-900
-                        md:justify-self-end
-                        dark:group-hover:text-neutral-100
-                      "
-                    >
-                      {isCopied ? (
-                        <>
-                          <Check
-                            className="h-4 w-4"
-                            aria-hidden="true"
-                          />
-                          <span>COPIED</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy
-                            className="h-4 w-4"
-                            aria-hidden="true"
-                          />
-                          <span>COPY</span>
-                        </>
-                      )}
+                    <span className="inline-flex items-center gap-2 font-mono text-[11px] tracking-wider text-neutral-500 transition-colors duration-200 group-hover:text-neutral-900 md:justify-self-end">
+                      {isCopied ? 'COPIED' : 'COPY'}
                     </span>
                   </button>
                 );
@@ -623,7 +321,6 @@ export default function AboutPage({ onNavigate }) {
             </div>
           </section>
         )}
-
       </div>
     </main>
   );

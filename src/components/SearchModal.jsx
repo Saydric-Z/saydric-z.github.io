@@ -1,5 +1,3 @@
-// src/components/SearchModal.jsx
-
 import {
   useCallback,
   useEffect,
@@ -7,30 +5,15 @@ import {
   useRef,
   useState,
 } from 'react';
-
-import {
-  ArrowDown,
-  ArrowUp,
-  CornerDownLeft,
-  Search,
-  X,
-} from 'lucide-react';
-
+import { Search, X } from 'lucide-react';
 import { SITE_DATA } from '../data/siteData';
-
-// ------------------------------------------------------------
-// Navigation shortcuts
-// ------------------------------------------------------------
 
 const NAV_PAGES = [
   { label: 'About', view: 'about' },
+  { label: 'Projects', view: 'projects' },
   { label: 'Notes', view: 'notes' },
   { label: 'Blogs', view: 'blogs' },
 ];
-
-// ------------------------------------------------------------
-// Date parsing and sorting
-// ------------------------------------------------------------
 
 const MONTHS = {
   JAN: 0,
@@ -47,15 +30,10 @@ const MONTHS = {
   DEC: 11,
 };
 
-/**
- * Parse common publication date formats, including:
- * - OCT 15, 2026
- * - NOV 12, 2026
- * - OCT 2026
- * - ISO date strings
- *
- * Returns a timestamp, or null when the date is invalid.
- */
+// ============================================================
+// Date helpers
+// ============================================================
+
 function parsePublicationDate(value) {
   if (!value) return null;
 
@@ -65,17 +43,8 @@ function parsePublicationDate(value) {
   }
 
   const text = String(value).trim();
-
   if (!text) return null;
 
-  // Handle ISO timestamps and other formats supported by the browser.
-  const nativeTimestamp = Date.parse(text);
-
-  if (Number.isFinite(nativeTimestamp)) {
-    return nativeTimestamp;
-  }
-
-  // Explicitly support abbreviated English month formats.
   const normalized = text
     .toUpperCase()
     .replace(/,/g, '')
@@ -86,41 +55,38 @@ function parsePublicationDate(value) {
     /^([A-Z]{3})\s+(?:(\d{1,2})\s+)?(\d{4})$/,
   );
 
-  if (!match) return null;
+  if (match) {
+    const month = MONTHS[match[1]];
+    const day = match[2] ? Number(match[2]) : 1;
+    const year = Number(match[3]);
 
-  const month = MONTHS[match[1]];
-  const day = match[2] ? Number(match[2]) : 1;
-  const year = Number(match[3]);
+    if (
+      month === undefined ||
+      !Number.isInteger(year) ||
+      day < 1 ||
+      day > 31
+    ) {
+      return null;
+    }
 
-  if (
-    month === undefined ||
-    !Number.isInteger(year) ||
-    day < 1 ||
-    day > 31
-  ) {
-    return null;
+    const date = new Date(Date.UTC(year, month, day));
+
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+
+    return date.getTime();
   }
 
-  const date = new Date(Date.UTC(year, month, day));
-
-  // Reject invalid calendar dates rather than silently normalizing them.
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month ||
-    date.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  return date.getTime();
+  const timestamp = Date.parse(text);
+  return Number.isFinite(timestamp) ? timestamp : null;
 }
 
-/**
- * Prefer lastEdited; use date when lastEdited is absent or invalid.
- * If effective dates are equal, use the publication date as a
- * deterministic secondary sort key.
- */
-function getEffectiveTimestamp(publication) {
+function effectiveTimestamp(publication) {
   return (
     parsePublicationDate(publication?.lastEdited) ??
     parsePublicationDate(publication?.date) ??
@@ -128,19 +94,39 @@ function getEffectiveTimestamp(publication) {
   );
 }
 
-function getPublicationDateTimestamp(publication) {
+function publicationTimestamp(publication) {
   return parsePublicationDate(publication?.date) ?? 0;
 }
 
-// ------------------------------------------------------------
+function isPublished(publication) {
+  return Boolean(
+    publication?.htmlUrl || publication?.status === 'published',
+  );
+}
+
+function resolveViewFromPath() {
+  if (typeof window === 'undefined') return 'about';
+
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+
+  if (path === '/' || path === '/about') return 'about';
+  if (path === '/projects') return 'projects';
+  if (path === '/blogs') return 'blogs';
+  if (path === '/notes' || path.startsWith('/notes/')) return 'notes';
+
+  return 'notes';
+}
+
+// ============================================================
 // SearchModal
-// ------------------------------------------------------------
+// ============================================================
 
 export default function SearchModal({
   isOpen,
   onClose,
   onSelectNote,
   onNavigate,
+  currentView: currentViewProp,
 }) {
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
@@ -148,46 +134,40 @@ export default function SearchModal({
   const inputRef = useRef(null);
   const resultRefs = useRef([]);
 
+  const currentView = currentViewProp ?? resolveViewFromPath();
+
+  const activeNavigationView =
+    currentView === 'detail' || currentView === 'note-detail'
+      ? 'notes'
+      : currentView;
+
   // ----------------------------------------------------------
-  // Source data: newest changes first
+  // Sort by most recent revision
   // ----------------------------------------------------------
 
   const sortedPublications = useMemo(() => {
-    const source = Array.isArray(SITE_DATA?.publications)
+    const publications = Array.isArray(SITE_DATA?.publications)
       ? SITE_DATA.publications
       : [];
 
-    return source
+    return publications
       .map((publication, originalIndex) => ({
         publication,
         originalIndex,
       }))
       .sort((a, b) => {
-        const timestampA = getEffectiveTimestamp(
-          a.publication,
-        );
+        const revisionDifference =
+          effectiveTimestamp(b.publication) -
+          effectiveTimestamp(a.publication);
 
-        const timestampB = getEffectiveTimestamp(
-          b.publication,
-        );
+        if (revisionDifference !== 0) return revisionDifference;
 
-        // Primary sort: latest edit/publication date first.
-        if (timestampA !== timestampB) {
-          return timestampB - timestampA;
-        }
+        const dateDifference =
+          publicationTimestamp(b.publication) -
+          publicationTimestamp(a.publication);
 
-        // Secondary sort: later publication date first.
-        const publicationDateA =
-          getPublicationDateTimestamp(a.publication);
+        if (dateDifference !== 0) return dateDifference;
 
-        const publicationDateB =
-          getPublicationDateTimestamp(b.publication);
-
-        if (publicationDateA !== publicationDateB) {
-          return publicationDateB - publicationDateA;
-        }
-
-        // Preserve original ordering when both dates are equal.
         return a.originalIndex - b.originalIndex;
       })
       .map(({ publication }) => publication);
@@ -201,51 +181,47 @@ export default function SearchModal({
     const keyword = query.trim().toLowerCase();
 
     if (!keyword) {
-      // The archive opens with the eight most recently changed notes.
       return sortedPublications.slice(0, 8);
     }
 
-    return sortedPublications.filter((publication) => {
-      const searchableFields = [
+    return sortedPublications.filter((publication) =>
+      [
         publication?.title,
         publication?.category,
         publication?.summary,
         publication?.abstract,
-      ];
+      ].some((field) =>
+        String(field || '').toLowerCase().includes(keyword),
+      ),
+    );
+  }, [query, sortedPublications]);
 
-      return searchableFields.some((field) =>
-        String(field || '')
-          .toLowerCase()
-          .includes(keyword),
-      );
-    });
-  }, [sortedPublications, query]);
-
-  // Keep the selected index within the available results.
-  const safeActiveIndex =
-    filteredNotes.length > 0
-      ? Math.min(activeIndex, filteredNotes.length - 1)
-      : 0;
+  const safeActiveIndex = filteredNotes.length
+    ? Math.min(activeIndex, filteredNotes.length - 1)
+    : 0;
 
   // ----------------------------------------------------------
-  // Focus management and page scrolling
+  // Focus and background scroll management
   // ----------------------------------------------------------
 
   useEffect(() => {
     if (!isOpen) return undefined;
 
     const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement;
 
     document.body.style.overflow = 'hidden';
     inputRef.current?.focus();
 
     return () => {
       document.body.style.overflow = previousOverflow;
+
+      if (previousFocus instanceof HTMLElement) {
+        previousFocus.focus({ preventScroll: true });
+      }
     };
   }, [isOpen]);
 
-  // Scroll the active result into view.
-  // This effect does not update React state.
   useEffect(() => {
     if (!isOpen) return;
 
@@ -260,25 +236,28 @@ export default function SearchModal({
   // ----------------------------------------------------------
 
   const closeModal = useCallback(() => {
+    setQuery('');
+    setActiveIndex(0);
+    resultRefs.current = [];
     onClose?.();
   }, [onClose]);
 
   const navigateToPage = useCallback(
     (view) => {
+      closeModal();
       onNavigate?.(view);
-      onClose?.();
     },
-    [onNavigate, onClose],
+    [closeModal, onNavigate],
   );
 
   const chooseNote = useCallback(
     (publication) => {
       if (!publication) return;
 
+      closeModal();
       onSelectNote?.(publication);
-      onClose?.();
     },
-    [onSelectNote, onClose],
+    [closeModal, onSelectNote],
   );
 
   // ----------------------------------------------------------
@@ -286,16 +265,7 @@ export default function SearchModal({
   // ----------------------------------------------------------
 
   const handleInputKeyDown = (event) => {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      event.stopPropagation();
-      closeModal();
-      return;
-    }
-
-    if (event.key === 'ArrowDown') {
-      if (filteredNotes.length === 0) return;
-
+    if (event.key === 'ArrowDown' && filteredNotes.length > 0) {
       event.preventDefault();
 
       setActiveIndex(
@@ -305,9 +275,7 @@ export default function SearchModal({
       return;
     }
 
-    if (event.key === 'ArrowUp') {
-      if (filteredNotes.length === 0) return;
-
+    if (event.key === 'ArrowUp' && filteredNotes.length > 0) {
       event.preventDefault();
 
       setActiveIndex((previous) =>
@@ -319,252 +287,366 @@ export default function SearchModal({
       return;
     }
 
-    if (event.key === 'Enter') {
-      if (filteredNotes.length === 0) return;
-
+    if (event.key === 'Enter' && filteredNotes.length > 0) {
       event.preventDefault();
       chooseNote(filteredNotes[safeActiveIndex]);
     }
   };
 
-  // ----------------------------------------------------------
-  // Visual helpers
-  // ----------------------------------------------------------
+  if (!isOpen) return null;
 
-  const getResultClassName = (isActive) =>
-    [
-      'block w-full cursor-pointer rounded-lg px-3 py-3 text-left',
-      'transition-colors duration-150',
-      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400',
-      isActive
-        ? 'bg-neutral-100 dark:bg-neutral-800'
-        : 'hover:bg-neutral-100/70 dark:hover:bg-white/[0.04]',
-    ].join(' ');
-
-  // ----------------------------------------------------------
+  // ==========================================================
   // Render
-  // ----------------------------------------------------------
-
-  if (!isOpen) {
-    return null;
-  }
+  // ==========================================================
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 px-4 pb-8 pt-[12vh] backdrop-blur-[2px] sm:px-6"
+      className="
+        fixed inset-0 z-50
+        flex items-start justify-center
+        bg-neutral-950/20
+        px-4 pb-8 pt-[10vh]
+        backdrop-blur-sm
+        sm:px-6
+      "
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           closeModal();
         }
       }}
     >
+      {/* 
+        Main glass card: 
+        Entire card shares a unified frosted glass surface (bg-white/75 + backdrop-blur-2xl).
+        Header and Footer are fixed shrink-0 panes; only the middle section scrolls.
+      */}
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="search-modal-title"
         onMouseDown={(event) => event.stopPropagation()}
-        className="w-full max-w-2xl overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-[#111111]"
+        onKeyDownCapture={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            event.stopPropagation();
+            closeModal();
+          }
+        }}
+        className="
+          flex max-h-[min(78vh,680px)]
+          w-full max-w-xl
+          flex-col overflow-hidden
+          rounded-2xl
+          border border-white/80
+          bg-white/75
+          shadow-[0_24px_60px_rgba(0,0,0,0.1)]
+          ring-1 ring-black/5
+          backdrop-blur-2xl
+        "
       >
         {/* ==================================================
-            Search input
+            1. Top Fixed Header (Input + JUMP TO)
+            Purely transparent so the parent's glass shows through,
+            and never overlaps with scrolling list items.
             ================================================== */}
-
-        <div className="flex items-center gap-3 border-b border-neutral-200 px-4 dark:border-neutral-800 sm:px-5">
-          <Search
-            className="h-5 w-5 shrink-0 text-neutral-400"
-            aria-hidden="true"
-          />
-
-          <label
-            id="search-modal-title"
-            htmlFor="archive-search-input"
-            className="sr-only"
-          >
-            Search academic notes
-          </label>
-
-          <input
-            ref={inputRef}
-            id="archive-search-input"
-            type="text"
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setActiveIndex(0);
-            }}
-            onKeyDown={handleInputKeyDown}
-            placeholder="Search archive..."
-            autoComplete="off"
-            spellCheck={false}
-            className="h-14 min-w-0 flex-1 bg-transparent text-sm text-neutral-900 outline-none placeholder:text-neutral-400 dark:text-neutral-100"
-          />
-
-          <button
-            type="button"
-            onClick={closeModal}
-            aria-label="Close search"
-            className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
-          >
-            <X
-              className="h-4 w-4"
+        <div
+          className="
+            shrink-0
+            border-b border-neutral-900/10
+            bg-transparent
+            px-5 pt-4 pb-3
+          "
+        >
+          {/* Search input */}
+          <div className="flex items-center gap-3">
+            <Search
+              className="h-4 w-4 shrink-0 text-neutral-500"
               aria-hidden="true"
             />
-          </button>
-        </div>
 
-        {/* ==================================================
-            Horizontal navigation bar
-            ================================================== */}
+            <label
+              id="search-modal-title"
+              htmlFor="archive-search-input"
+              className="sr-only"
+            >
+              Search academic notes
+            </label>
 
-        <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-2 dark:border-neutral-800/80 dark:bg-neutral-900/50">
-          <div className="flex items-center gap-1.5">
-            <span className="mr-2 shrink-0 font-mono text-[10px] uppercase tracking-wider text-neutral-400">
+            <input
+              ref={inputRef}
+              id="archive-search-input"
+              type="text"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActiveIndex(0);
+              }}
+              onKeyDown={handleInputKeyDown}
+              placeholder="Search archive..."
+              autoComplete="off"
+              spellCheck={false}
+              className="
+                h-9 min-w-0 flex-1
+                bg-transparent
+                text-sm text-neutral-900
+                placeholder:text-neutral-400
+                focus:outline-none
+              "
+            />
+
+            <button
+              type="button"
+              onClick={closeModal}
+              aria-label="Close search"
+              className="
+                flex h-7 w-7 shrink-0
+                cursor-pointer items-center justify-center
+                rounded-md
+                text-neutral-400
+                transition-colors
+                hover:bg-neutral-900/5
+                hover:text-neutral-800
+                focus-visible:outline-none
+                focus-visible:ring-2
+                focus-visible:ring-neutral-400
+              "
+            >
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
+
+          {/* JUMP TO navigation */}
+          <nav
+            aria-label="Jump to page"
+            className="
+              mt-2.5 flex flex-wrap items-center gap-1.5
+              border-t border-neutral-900/5
+              pt-2.5
+            "
+          >
+            <span
+              className="
+                mr-1 shrink-0
+                font-mono text-[10px]
+                uppercase tracking-wider
+                text-neutral-500
+              "
+            >
               Jump to:
             </span>
 
-            {NAV_PAGES.map((tab) => (
-              <button
-                key={tab.view}
-                type="button"
-                onClick={() => navigateToPage(tab.view)}
-                className="cursor-pointer rounded-md px-2.5 py-1 font-mono text-xs text-neutral-600 transition-colors hover:bg-neutral-200/60 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-white"
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+            {NAV_PAGES.map((page) => {
+              const isActive = activeNavigationView === page.view;
+
+              return (
+                <button
+                  key={page.view}
+                  type="button"
+                  onClick={() => navigateToPage(page.view)}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={`
+                    cursor-pointer rounded-md
+                    px-2.5 py-1
+                    font-mono text-xs
+                    transition-colors
+                    focus-visible:outline-none
+                    focus-visible:ring-2
+                    focus-visible:ring-neutral-400
+                    ${
+                      isActive
+                        ? 'bg-neutral-900/10 font-medium text-neutral-900'
+                        : 'text-neutral-600 hover:bg-neutral-900/5 hover:text-neutral-900'
+                    }
+                  `}
+                >
+                  {page.label}
+                </button>
+              );
+            })}
+          </nav>
         </div>
 
         {/* ==================================================
-            Notes list — pure text, latest first
+            2. Middle Dedicated Scrollable List
+            Scrolls cleanly between header and footer without bleeding.
             ================================================== */}
+        <section
+          aria-label="Academic notes"
+          className="
+            min-h-0 flex-1
+            overflow-y-auto overscroll-contain
+            bg-transparent
+            px-3 py-2.5
+            [scrollbar-width:thin]
+            [scrollbar-color:rgba(115,115,115,0.22)_transparent]
+            [&::-webkit-scrollbar]:w-1.5
+            [&::-webkit-scrollbar-track]:bg-transparent
+            [&::-webkit-scrollbar-thumb]:rounded-full
+            [&::-webkit-scrollbar-thumb]:bg-neutral-400/30
+            [&::-webkit-scrollbar-thumb:hover]:bg-neutral-500/45
+          "
+        >
+          <h2
+            className="
+              px-3 py-1.5
+              font-mono text-[10px]
+              uppercase tracking-widest
+              text-neutral-500
+            "
+          >
+            {query.trim() ? 'Matching Notes' : 'Notes Archive'}
+          </h2>
 
-        <div className="max-h-[min(60vh,520px)] overflow-y-auto p-2">
-          <section aria-label="Academic notes">
-            <h2 className="px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-neutral-400">
-              {query.trim()
-                ? 'Matching Notes'
-                : 'Notes Archive'}
-            </h2>
+          {filteredNotes.length > 0 ? (
+            <ul className="space-y-1">
+              {filteredNotes.map((publication, index) => {
+                const selected = index === safeActiveIndex;
+                const published = isPublished(publication);
 
-            {filteredNotes.length > 0 ? (
-              <ul className="space-y-1">
-                {filteredNotes.map((publication, index) => {
-                  const isActive =
-                    index === safeActiveIndex;
-
-                  const isPublished =
-                    Boolean(publication?.htmlUrl);
-
-                  return (
-                    <li
-                      key={
-                        publication?.id ||
-                        publication?.title ||
-                        index
-                      }
+                return (
+                  <li
+                    key={
+                      publication?.id ??
+                      publication?.title ??
+                      index
+                    }
+                  >
+                    <button
+                      ref={(element) => {
+                        resultRefs.current[index] = element;
+                      }}
+                      type="button"
+                      data-selected={selected ? 'true' : 'false'}
+                      onMouseEnter={() => setActiveIndex(index)}
+                      onFocus={() => setActiveIndex(index)}
+                      onClick={() => chooseNote(publication)}
+                      className="
+                        block w-full cursor-pointer
+                        rounded-xl bg-transparent
+                        px-3.5 py-3 text-left
+                        transition-colors duration-150
+                        hover:bg-neutral-900/[0.06]
+                        data-[selected=true]:bg-neutral-900/[0.06]
+                        focus-visible:outline-none
+                        focus-visible:ring-2
+                        focus-visible:ring-neutral-500/60
+                      "
                     >
-                      <button
-                        ref={(element) => {
-                          resultRefs.current[index] = element;
-                        }}
-                        type="button"
-                        onMouseEnter={() =>
-                          setActiveIndex(index)
-                        }
-                        onFocus={() =>
-                          setActiveIndex(index)
-                        }
-                        onClick={() => chooseNote(publication)}
-                        className={getResultClassName(isActive)}
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="break-words font-serif text-sm font-semibold text-neutral-900">
+                          {publication?.title || 'Untitled Note'}
+                        </span>
+
+                        <span
+                          className={`
+                            rounded border
+                            px-1.5 py-0.5
+                            font-mono text-[9px]
+                            uppercase tracking-wider
+                            ${
+                              published
+                                ? 'border-neutral-400/60 bg-white/40 text-neutral-700'
+                                : 'border-neutral-300/70 text-neutral-500'
+                            }
+                          `}
+                        >
+                          {published ? 'Published' : 'In Progress'}
+                        </span>
+                      </span>
+
+                      <span
+                        className="
+                          mt-1 block
+                          font-mono text-[10px]
+                          uppercase tracking-wider
+                          text-neutral-500
+                        "
                       >
-                        {/* Title and publication status */}
-                        <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="break-words text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                            {publication?.title || 'Untitled Note'}
-                          </span>
+                        {publication?.category || 'Uncategorized'}
+                      </span>
 
-                          <span
-                            className={[
-                              'rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide',
-                              isPublished
-                                ? 'border-emerald-200 text-emerald-700 dark:border-emerald-900 dark:text-emerald-400'
-                                : 'border-neutral-200 text-neutral-400 dark:border-neutral-700 dark:text-neutral-500',
-                            ].join(' ')}
-                          >
-                            {isPublished
-                              ? 'Published'
-                              : 'In Progress'}
-                          </span>
+                      {(publication?.summary ||
+                        publication?.abstract) && (
+                        <span
+                          className="
+                            mt-1 block line-clamp-2
+                            text-xs leading-relaxed
+                            text-neutral-600
+                          "
+                        >
+                          {publication.summary ||
+                            publication.abstract}
                         </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="px-6 py-12 text-center">
+              <p className="text-sm font-medium text-neutral-700">
+                No matching notes found
+              </p>
 
-                        {/* Category */}
-                        <span className="mt-1 block font-mono text-[10px] uppercase tracking-wider text-neutral-400">
-                          {publication?.category || 'Uncategorized'}
-                        </span>
-
-                        {/* Summary */}
-                        {(publication?.summary ||
-                          publication?.abstract) && (
-                          <span className="mt-1 line-clamp-2 block text-xs leading-5 text-neutral-500 dark:text-neutral-400">
-                            {publication.summary ||
-                              publication.abstract}
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <div className="px-6 py-12 text-center">
-                <Search
-                  className="mx-auto mb-3 h-5 w-5 text-neutral-300 dark:text-neutral-700"
-                  aria-hidden="true"
-                />
-
-                <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                  No matching notes found
-                </p>
-
-                <p className="mt-2 text-xs leading-5 text-neutral-400">
-                  Try another title, subject, or keyword.
-                </p>
-              </div>
-            )}
-          </section>
-        </div>
+              <p className="mt-2 text-xs leading-5 text-neutral-500">
+                Try another title, subject, or keyword.
+              </p>
+            </div>
+          )}
+        </section>
 
         {/* ==================================================
-            Keyboard hints
+            3. Bottom Fixed Footer
+            Purely transparent so the parent's glass shows through,
+            and never clips or overlaps with the last note item.
             ================================================== */}
-
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 px-4 py-3 dark:border-neutral-800 sm:px-5">
-          <div className="flex flex-wrap items-center gap-3 text-[10px] text-neutral-400">
-            <span className="inline-flex items-center gap-1">
-              <kbd className="inline-flex h-5 w-5 items-center justify-center rounded border border-neutral-200 font-mono dark:border-neutral-700">
-                <ArrowUp
-                  className="h-3 w-3"
-                  aria-hidden="true"
-                />
+        <footer
+          className="
+            shrink-0
+            flex flex-wrap items-center justify-between
+            gap-3
+            border-t border-neutral-900/10
+            bg-transparent
+            px-5 py-2.5
+            font-mono text-[11px]
+            text-neutral-500
+          "
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1.5">
+              <kbd
+                className="
+                  inline-flex h-5 min-w-5 items-center justify-center
+                  rounded border border-neutral-400/50
+                  bg-white/40 px-1 font-mono text-[10px] text-neutral-700
+                "
+              >
+                ↑
               </kbd>
 
-              <kbd className="inline-flex h-5 w-5 items-center justify-center rounded border border-neutral-200 font-mono dark:border-neutral-700">
-                <ArrowDown
-                  className="h-3 w-3"
-                  aria-hidden="true"
-                />
+              <kbd
+                className="
+                  inline-flex h-5 min-w-5 items-center justify-center
+                  rounded border border-neutral-400/50
+                  bg-white/40 px-1 font-mono text-[10px] text-neutral-700
+                "
+              >
+                ↓
               </kbd>
 
               Navigate
             </span>
 
-            <span className="inline-flex items-center gap-1">
-              <kbd className="inline-flex h-5 items-center justify-center rounded border border-neutral-200 px-1.5 font-mono dark:border-neutral-700">
-                <CornerDownLeft
-                  className="h-3 w-3"
-                  aria-hidden="true"
-                />
+            <span className="inline-flex items-center gap-1.5">
+              <kbd
+                className="
+                  inline-flex h-5 items-center justify-center
+                  rounded border border-neutral-400/50
+                  bg-white/40 px-1.5 font-mono text-[10px] text-neutral-700
+                "
+              >
+                ↵
               </kbd>
 
               Open note
@@ -574,7 +656,15 @@ export default function SearchModal({
           <button
             type="button"
             onClick={closeModal}
-            className="cursor-pointer text-[10px] text-neutral-400 transition-colors hover:text-neutral-700 dark:hover:text-neutral-200"
+            className="
+              cursor-pointer
+              text-[11px] text-neutral-500
+              transition-colors
+              hover:text-neutral-900
+              focus-visible:outline-none
+              focus-visible:ring-2
+              focus-visible:ring-neutral-400
+            "
           >
             ESC to close
           </button>
